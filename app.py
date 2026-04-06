@@ -65,23 +65,20 @@ st.markdown("""
 
 # ── Autenticación ─────────────────────────────────────────────────────────────
 
-@st.cache_resource
-def load_auth():
-    with open("credentials.yaml") as f:
-        config = yaml.load(f, Loader=SafeLoader)
-    authenticator = stauth.Authenticate(
-        config["credentials"],
-        config["cookie"]["name"],
-        config["cookie"]["key"],
-        config["cookie"]["expiry_days"],
-    )
-    return authenticator
+# Inicializar claves de sesión requeridas por streamlit-authenticator
+for _key in ["authentication_status", "name", "username", "logout"]:
+    if _key not in st.session_state:
+        st.session_state[_key] = None
 
-authenticator = load_auth()
+with open("credentials.yaml") as f:
+    _config = yaml.load(f, Loader=SafeLoader)
 
-# Pantalla de login
-if "authentication_status" not in st.session_state:
-    st.session_state["authentication_status"] = None
+authenticator = stauth.Authenticate(
+    _config["credentials"],
+    _config["cookie"]["name"],
+    _config["cookie"]["key"],
+    _config["cookie"]["expiry_days"],
+)
 
 # Mostrar login centrado cuando no está autenticado
 if st.session_state.get("authentication_status") is not True:
