@@ -1,0 +1,7 @@
+pandas>=2.0
+openpyxl>=3.1
+chardet>=4.0
+streamlit>=1.32
+streamlit-authenticator>=0.3.3
+PyYAML>=6.0
+pyarrow>=14.0
