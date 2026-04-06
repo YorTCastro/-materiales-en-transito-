@@ -502,7 +502,6 @@ CHART_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font=CHART_FONT,
-    margin=dict(t=50, b=20, l=10, r=20),
     hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#e5e7eb"),
 )
 
