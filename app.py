@@ -641,8 +641,13 @@ with tab2:
     with r2c2:
         st.markdown("**🔄 Tasa de anulaciones por origen y usuario**")
         if not cancel_df.empty:
+            def color_cancel(val):
+                if isinstance(val, (int, float)):
+                    if val >= 50: return "background-color:#FF9800; color:#000"
+                    if val >= 20: return "background-color:#FFE0B2; color:#000"
+                return ""
             st.dataframe(
-                cancel_df.style.background_gradient(subset=["% Anulación"], cmap="Oranges"),
+                cancel_df.style.applymap(color_cancel, subset=["% Anulación"]),
                 use_container_width=True, hide_index=True, height=320,
             )
         else:
