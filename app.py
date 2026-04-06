@@ -647,7 +647,7 @@ with tab2:
                     if val >= 20: return "background-color:#FFE0B2; color:#000"
                 return ""
             st.dataframe(
-                cancel_df.style.applymap(color_cancel, subset=["% Anulación"]),
+                cancel_df.style.map(color_cancel, subset=["% Anulación"]),
                 use_container_width=True, hide_index=True, height=320,
             )
         else:
