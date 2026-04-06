@@ -389,31 +389,123 @@ with st.spinner("Procesando archivos SAP..."):
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
 
+import plotly.graph_objects as go
+import plotly.express as px
+
 st.divider()
 st.subheader("📊 Resumen Ejecutivo")
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Total líneas",         kpis["total_lineas"])
-k2.metric("Con entrada",          kpis["n_con_entrada"])
-k3.metric("Sin entrada",          kpis["n_sin_entrada"])
-k4.metric("Importe pendiente",    f"{kpis['importe_pendiente_total']:,.0f}")
+# Fila 1 — tarjetas de indicadores clave
+def kpi_card(label, value, sublabel="", color="#2F5597"):
+    return f"""
+    <div style="background:{color}10; border-left:4px solid {color};
+                border-radius:8px; padding:14px 18px; height:90px;">
+        <div style="font-size:12px; color:#555; font-weight:600;
+                    text-transform:uppercase; letter-spacing:0.5px;">{label}</div>
+        <div style="font-size:28px; font-weight:700; color:{color}; line-height:1.2;">{value}</div>
+        <div style="font-size:11px; color:#888; margin-top:2px;">{sublabel}</div>
+    </div>"""
 
-st.markdown("")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("🟢 Oportunos",  f"{kpis['pct_oportuno']}%",  f"{kpis['n_verde']+kpis['n_amarillo']} registros")
-c2.metric("🔴 Vencidos",   f"{kpis['pct_vencido']}%",   f"{kpis['n_rojo']} registros",    delta_color="inverse")
-c3.metric("⚠️ Anulaciones", f"{kpis['pct_anulaciones']}%", f"{kpis['n_anulaciones']} registros", delta_color="inverse")
-c4.metric("📦 Parciales",  f"{kpis['pct_parciales']}%",  f"{kpis['n_parciales']} registros")
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.markdown(kpi_card("Total líneas", kpis["total_lineas"], "pedidos analizados"), unsafe_allow_html=True)
+col2.markdown(kpi_card("Con entrada", kpis["n_con_entrada"], f"{kpis['n_sin_entrada']} sin entrada", "#1565C0"), unsafe_allow_html=True)
+col3.markdown(kpi_card("% Oportuno", f"{kpis['pct_oportuno']}%", f"{kpis['n_verde']+kpis['n_amarillo']} registros", "#2E7D32"), unsafe_allow_html=True)
+col4.markdown(kpi_card("% Vencido", f"{kpis['pct_vencido']}%", f"{kpis['n_rojo']} registros ROJO", "#C62828"), unsafe_allow_html=True)
+col5.markdown(kpi_card("Imp. Pendiente", f"{kpis['importe_pendiente_total']:,.0f}", "moneda local", "#E65100"), unsafe_allow_html=True)
 
-# Comparativo por origen
-if kpis.get("por_origen"):
-    st.markdown("")
-    st.markdown("**Cumplimiento por origen:**")
-    orig_cols = st.columns(len(kpis["por_origen"]))
-    for i, (origen, pct) in enumerate(sorted(kpis["por_origen"].items(),
-                                              key=lambda x: (x[1] or 0), reverse=True)):
-        pct_str = f"{round(pct, 1)}%" if pct is not None else "Sin datos"
-        orig_cols[i].metric(origen, pct_str)
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Fila 2 — gráficas principales
+gc1, gc2, gc3 = st.columns([1.1, 1.1, 0.8])
+
+# Gráfica 1: Donut distribución de alertas
+with gc1:
+    n_verde   = kpis["n_verde"]
+    n_amarillo= kpis["n_amarillo"]
+    n_rojo    = kpis["n_rojo"]
+    n_sin     = kpis["n_sin_entrada"]
+    labels    = ["Verde (1-3 días)", f"Amarillo (4-{policy_days} días)", f"Rojo (>{policy_days} días)", "Sin entrada"]
+    values    = [n_verde, n_amarillo, n_rojo, n_sin]
+    colors_d  = ["#00B050", "#FFC000", "#FF0000", "#BDBDBD"]
+
+    fig_donut = go.Figure(go.Pie(
+        labels=labels, values=values,
+        hole=0.55,
+        marker=dict(colors=colors_d, line=dict(color="#ffffff", width=2)),
+        textinfo="percent+value",
+        textfont=dict(size=12),
+        hovertemplate="<b>%{label}</b><br>Cantidad: %{value}<br>%{percent}<extra></extra>",
+    ))
+    fig_donut.add_annotation(
+        text=f"<b>{kpis['total_lineas']}</b><br>líneas",
+        x=0.5, y=0.5, font_size=14, showarrow=False
+    )
+    fig_donut.update_layout(
+        title=dict(text="Distribución por Estado de Ingreso", font_size=14, x=0.5),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5, font_size=11),
+        margin=dict(t=45, b=10, l=10, r=10),
+        height=280,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+# Gráfica 2: Barras por origen
+with gc2:
+    origen_kpis = kpis.get("por_origen", {})
+    if origen_kpis:
+        orig_names = list(origen_kpis.keys())
+        orig_vals  = [round(v, 1) if v is not None else 0 for v in origen_kpis.values()]
+        orig_colors= ["#2196F3" if v >= 80 else "#FF9800" if v >= 60 else "#F44336" for v in orig_vals]
+
+        fig_bar = go.Figure(go.Bar(
+            x=orig_names, y=orig_vals,
+            marker=dict(color=orig_colors, line=dict(color="#ffffff", width=1)),
+            text=[f"{v}%" for v in orig_vals],
+            textposition="outside",
+            textfont=dict(size=13, color="#333"),
+            hovertemplate="<b>%{x}</b><br>% Oportuno: %{y}%<extra></extra>",
+        ))
+        fig_bar.add_hline(y=80, line_dash="dash", line_color="#2E7D32",
+                          annotation_text="Meta 80%", annotation_position="top right",
+                          annotation_font_size=10)
+        fig_bar.update_layout(
+            title=dict(text="Cumplimiento por Origen", font_size=14, x=0.5),
+            yaxis=dict(title="% Oportuno", range=[0, 110], ticksuffix="%", gridcolor="#eee"),
+            xaxis=dict(title=""),
+            margin=dict(t=45, b=10, l=10, r=10),
+            height=280,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("Sin datos de origen.")
+
+# Gráfica 3: Indicadores secundarios (tarjetas mini)
+with gc3:
+    st.markdown("""
+    <div style="display:flex; flex-direction:column; gap:10px; padding-top:8px;">
+    """, unsafe_allow_html=True)
+
+    def mini_card(icon, label, val, color):
+        return f"""<div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px;
+                    padding:10px 14px; display:flex; align-items:center; gap:12px;">
+            <div style="font-size:22px;">{icon}</div>
+            <div>
+                <div style="font-size:11px; color:#666; text-transform:uppercase;">{label}</div>
+                <div style="font-size:20px; font-weight:700; color:{color};">{val}</div>
+            </div></div>"""
+
+    st.markdown(
+        mini_card("⚠️", "Con anulaciones", f"{kpis['pct_anulaciones']}%", "#E65100") +
+        mini_card("📦", "Ingresos parciales", f"{kpis['pct_parciales']}%", "#1565C0") +
+        mini_card("❌", "Sin entrada", kpis["n_sin_entrada"], "#C62828") +
+        mini_card("✅", "Verde (oportuno)", kpis["n_verde"], "#2E7D32"),
+        unsafe_allow_html=True
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ── Tabs de análisis ──────────────────────────────────────────────────────────
 
@@ -428,26 +520,26 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # -- Tab 1: Detalle --
 with tab1:
-    st.markdown("Ordenado por días transcurridos (mayor a menor). Las filas en naranja tienen datos incompletos.")
+    st.caption("Ordenado por días transcurridos (mayor a menor).")
 
     display_cols = {
-        "Material":           "_material_po",
-        "Descripción":        "_description",
-        "Origen":             "origen",
-        "Pedido":             "_order",
-        "Pos.":               "_position",
-        "Fecha Pedido":       "_po_doc_date",
-        "Fecha Ingreso":      "last_acc_date",
-        "Días":               "dias_transcurridos",
-        "Alerta":             "alerta",
-        "Qty Ordenada":       "_qty_ordered",
-        "Qty Entrada":        "qty_101",
-        "Qty Anulada":        "qty_102",
-        "Qty Neta":           "qty_neta",
-        "Qty Pendiente":      "qty_pendiente",
-        "Importe ML":         "amount_101",
-        "Usuarios":           "users_101",
-        "¿Anulación?":        "tiene_anulacion",
+        "Material":      "_material_po",
+        "Descripción":   "_description",
+        "Origen":        "origen",
+        "Pedido":        "_order",
+        "Pos.":          "_position",
+        "Fecha Pedido":  "_po_doc_date",
+        "Fecha Ingreso": "last_acc_date",
+        "Días":          "dias_transcurridos",
+        "Alerta":        "alerta",
+        "Qty Ordenada":  "_qty_ordered",
+        "Qty Entrada":   "qty_101",
+        "Qty Anulada":   "qty_102",
+        "Qty Neta":      "qty_neta",
+        "Qty Pendiente": "qty_pendiente",
+        "Importe ML":    "amount_101",
+        "Usuarios":      "users_101",
+        "¿Anulación?":   "tiene_anulacion",
     }
 
     df_show = detail[[c for c in display_cols.values() if c in detail.columns]].copy()
@@ -470,33 +562,89 @@ with tab1:
 
 # -- Tab 2: Análisis adicionales --
 with tab2:
-    sub1, sub2, sub3, sub4 = st.columns([1,1,1,1])
+    r1c1, r1c2 = st.columns(2)
 
-    with sub1:
-        st.markdown("**🏆 Top materiales por tiempo promedio**")
+    # Gráfica: Top materiales por días promedio
+    with r1c1:
+        st.markdown("**🏆 Top materiales por tiempo promedio de ingreso**")
         if not top_mat.empty:
-            st.dataframe(top_mat, use_container_width=True, hide_index=True)
+            fig_mat = px.bar(
+                top_mat.sort_values("Días Promedio"),
+                x="Días Promedio", y="Material",
+                orientation="h",
+                text="Días Promedio",
+                color="Días Promedio",
+                color_continuous_scale=["#00B050","#FFC000","#FF0000"],
+                labels={"Días Promedio": "Días promedio", "Material": ""},
+            )
+            fig_mat.update_traces(texttemplate="%{text:.1f} días", textposition="outside")
+            fig_mat.update_layout(
+                height=320, margin=dict(t=10, b=10, l=10, r=30),
+                coloraxis_showscale=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(tickfont=dict(size=11)),
+            )
+            st.plotly_chart(fig_mat, use_container_width=True)
         else:
             st.caption("Sin datos.")
 
-    with sub2:
+    # Gráfica: Usuarios con más vencidos
+    with r1c2:
         st.markdown("**👤 Usuarios con más ingresos vencidos**")
         if not top_users.empty:
-            st.dataframe(top_users, use_container_width=True, hide_index=True)
+            fig_usr = px.bar(
+                top_users.sort_values("Ingresos Vencidos"),
+                x="Ingresos Vencidos", y="Usuario",
+                orientation="h",
+                text="Ingresos Vencidos",
+                color="Ingresos Vencidos",
+                color_continuous_scale=["#FF9800","#F44336"],
+                labels={"Ingresos Vencidos": "Ingresos vencidos", "Usuario": ""},
+            )
+            fig_usr.update_traces(textposition="outside")
+            fig_usr.update_layout(
+                height=320, margin=dict(t=10, b=10, l=10, r=30),
+                coloraxis_showscale=False,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_usr, use_container_width=True)
         else:
             st.caption("Sin datos.")
 
-    with sub3:
-        st.markdown("**💰 Mayor importe pendiente**")
+    r2c1, r2c2 = st.columns(2)
+
+    # Gráfica: Importe pendiente por material
+    with r2c1:
+        st.markdown("**💰 Materiales con mayor importe pendiente**")
         if not top_pend.empty:
-            st.dataframe(top_pend, use_container_width=True, hide_index=True)
+            fig_pend = px.bar(
+                top_pend.sort_values("Importe Pendiente"),
+                x="Importe Pendiente", y="Material",
+                orientation="h",
+                text="Importe Pendiente",
+                color_discrete_sequence=["#1565C0"],
+                labels={"Importe Pendiente": "Importe pendiente", "Material": ""},
+            )
+            fig_pend.update_traces(
+                texttemplate="%{text:,.0f}",
+                textposition="outside",
+            )
+            fig_pend.update_layout(
+                height=320, margin=dict(t=10, b=10, l=10, r=30),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_pend, use_container_width=True)
         else:
             st.caption("Sin datos.")
 
-    with sub4:
-        st.markdown("**🔄 Tasa de anulaciones**")
+    # Tabla: anulaciones
+    with r2c2:
+        st.markdown("**🔄 Tasa de anulaciones por origen y usuario**")
         if not cancel_df.empty:
-            st.dataframe(cancel_df, use_container_width=True, hide_index=True)
+            st.dataframe(
+                cancel_df.style.background_gradient(subset=["% Anulación"], cmap="Oranges"),
+                use_container_width=True, hide_index=True, height=320,
+            )
         else:
             st.caption("Sin datos.")
 
@@ -504,36 +652,58 @@ with tab2:
 with tab3:
     col_w, col_m = st.columns(2)
 
-    with col_w:
-        st.markdown("**Tendencia semanal**")
-        if not weekly.empty:
-            st.line_chart(
-                weekly.set_index("Período")["% Oportuno"],
-                use_container_width=True,
-            )
-            st.dataframe(weekly, use_container_width=True, hide_index=True)
-        else:
-            st.caption("Sin suficientes datos para tendencia semanal.")
+    def trend_chart(df_trend, title):
+        if df_trend.empty:
+            st.caption("Sin suficientes datos.")
+            return
+        df_trend = df_trend.copy()
+        df_trend["Período"] = df_trend["Período"].astype(str).str[:10]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_trend["Período"], y=df_trend["% Oportuno"],
+            mode="lines+markers+text",
+            name="% Oportuno",
+            line=dict(color="#2F5597", width=2.5),
+            marker=dict(size=8, color="#2F5597"),
+            text=df_trend["% Oportuno"].apply(lambda v: f"{v:.0f}%"),
+            textposition="top center",
+            textfont=dict(size=11),
+            fill="tozeroy",
+            fillcolor="rgba(47,85,151,0.08)",
+        ))
+        fig.add_hline(y=80, line_dash="dash", line_color="#2E7D32",
+                      annotation_text="Meta 80%", annotation_font_size=10)
+        fig.update_layout(
+            title=dict(text=title, font_size=14, x=0.5),
+            yaxis=dict(range=[0, 110], ticksuffix="%", gridcolor="#eee", title="% Oportuno"),
+            xaxis=dict(title="", tickangle=-30),
+            height=320, margin=dict(t=45, b=40, l=10, r=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(df_trend, use_container_width=True, hide_index=True)
 
+    with col_w:
+        trend_chart(weekly, "Tendencia Semanal — % Ingresos Oportunos")
     with col_m:
-        st.markdown("**Tendencia mensual**")
-        if not monthly.empty:
-            st.line_chart(
-                monthly.set_index("Período")["% Oportuno"],
-                use_container_width=True,
-            )
-            st.dataframe(monthly, use_container_width=True, hide_index=True)
-        else:
-            st.caption("Sin suficientes datos para tendencia mensual.")
+        trend_chart(monthly, "Tendencia Mensual — % Ingresos Oportunos")
 
 # -- Tab 4: Recomendaciones --
 with tab4:
     if recs:
         for i, rec in enumerate(recs, 1):
-            st.markdown(f"**{i}.** {rec}")
-            st.markdown("")
+            color = "#C62828" if "PRIORIDAD ALTA" in rec else "#E65100" if i == 1 else "#1565C0"
+            icon  = "🚨" if "PRIORIDAD ALTA" in rec else "⚠️" if i <= 2 else "💡"
+            st.markdown(f"""
+            <div style="background:{color}08; border-left:4px solid {color};
+                        border-radius:6px; padding:14px 18px; margin-bottom:10px;">
+                <span style="font-size:16px;">{icon}</span>
+                <span style="font-weight:600; color:{color}; margin-left:6px;">Recomendación {i}</span>
+                <p style="margin:6px 0 0 0; color:#333; line-height:1.5;">{rec}</p>
+            </div>""", unsafe_allow_html=True)
     else:
-        st.success("No se detectaron problemas críticos que recomienden acción inmediata.")
+        st.success("✅ No se detectaron problemas críticos que recomienden acción inmediata.")
 
 # -- Tab 5: Descargar Excel --
 with tab5:
