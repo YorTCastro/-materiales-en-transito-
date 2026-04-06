@@ -387,125 +387,136 @@ with st.spinner("Procesando archivos SAP..."):
         st.caption("Verifica que los archivos sean exportaciones válidas de SAP con las columnas correctas.")
         st.stop()
 
-# ── KPIs ──────────────────────────────────────────────────────────────────────
-
+# ── Paleta de colores profesional ────────────────────────────────────────────
 import plotly.graph_objects as go
 import plotly.express as px
+
+C_NAVY    = "#1B2A4A"   # Azul marino oscuro
+C_BLUE    = "#2563EB"   # Azul corporativo
+C_TEAL    = "#0D9488"   # Verde azulado
+C_GREEN   = "#16A34A"   # Verde éxito
+C_AMBER   = "#D97706"   # Ámbar advertencia
+C_RED     = "#DC2626"   # Rojo alerta
+C_SLATE   = "#64748B"   # Gris pizarra
+C_LIGHT   = "#F8FAFC"   # Fondo claro
+
+CHART_FONT = dict(family="Inter, Arial, sans-serif", size=12, color="#374151")
+CHART_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=CHART_FONT,
+    margin=dict(t=50, b=20, l=10, r=20),
+    hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#e5e7eb"),
+)
+
+# ── KPIs ──────────────────────────────────────────────────────────────────────
 
 st.divider()
 st.subheader("📊 Resumen Ejecutivo")
 
-# Fila 1 — tarjetas de indicadores clave
-def kpi_card(label, value, sublabel="", color="#2F5597"):
+def kpi_card(label, value, sublabel, color, icon):
     return f"""
-    <div style="background:{color}10; border-left:4px solid {color};
-                border-radius:8px; padding:14px 18px; height:90px;">
-        <div style="font-size:12px; color:#555; font-weight:600;
-                    text-transform:uppercase; letter-spacing:0.5px;">{label}</div>
-        <div style="font-size:28px; font-weight:700; color:{color}; line-height:1.2;">{value}</div>
-        <div style="font-size:11px; color:#888; margin-top:2px;">{sublabel}</div>
+    <div style="background:white; border-radius:10px; padding:16px 20px;
+                box-shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+                border-top:3px solid {color}; min-height:95px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="font-size:11px; font-weight:600; color:{C_SLATE};
+                    text-transform:uppercase; letter-spacing:0.6px;">{label}</div>
+        <div style="font-size:18px; opacity:0.7;">{icon}</div>
+      </div>
+      <div style="font-size:30px; font-weight:700; color:{color};
+                  line-height:1.1; margin:4px 0;">{value}</div>
+      <div style="font-size:11px; color:{C_SLATE};">{sublabel}</div>
     </div>"""
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.markdown(kpi_card("Total líneas", kpis["total_lineas"], "pedidos analizados"), unsafe_allow_html=True)
-col2.markdown(kpi_card("Con entrada", kpis["n_con_entrada"], f"{kpis['n_sin_entrada']} sin entrada", "#1565C0"), unsafe_allow_html=True)
-col3.markdown(kpi_card("% Oportuno", f"{kpis['pct_oportuno']}%", f"{kpis['n_verde']+kpis['n_amarillo']} registros", "#2E7D32"), unsafe_allow_html=True)
-col4.markdown(kpi_card("% Vencido", f"{kpis['pct_vencido']}%", f"{kpis['n_rojo']} registros ROJO", "#C62828"), unsafe_allow_html=True)
-col5.markdown(kpi_card("Imp. Pendiente", f"{kpis['importe_pendiente_total']:,.0f}", "moneda local", "#E65100"), unsafe_allow_html=True)
+c1,c2,c3,c4,c5 = st.columns(5)
+c1.markdown(kpi_card("Total líneas",    kpis["total_lineas"],                f"{kpis['n_con_entrada']} con entrada",          C_NAVY,  "📋"), unsafe_allow_html=True)
+c2.markdown(kpi_card("Sin entrada",     kpis["n_sin_entrada"],               "pendientes de registrar",                        C_SLATE, "⏳"), unsafe_allow_html=True)
+c3.markdown(kpi_card("% Oportuno",      f"{kpis['pct_oportuno']}%",          f"{kpis['n_verde']+kpis['n_amarillo']} registros",C_GREEN, "✅"), unsafe_allow_html=True)
+c4.markdown(kpi_card("% Fuera política",f"{kpis['pct_vencido']}%",           f"{kpis['n_rojo']} registros vencidos",           C_RED,   "🚨"), unsafe_allow_html=True)
+c5.markdown(kpi_card("Imp. Pendiente",  f"{kpis['importe_pendiente_total']:,.0f}", "moneda local",                             C_AMBER, "💰"), unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
 
-# Fila 2 — gráficas principales
-gc1, gc2, gc3 = st.columns([1.1, 1.1, 0.8])
+# ── Fila de gráficas ──────────────────────────────────────────────────────────
+gc1, gc2 = st.columns(2)
 
-# Gráfica 1: Donut distribución de alertas
+# Donut — estado de ingresos
 with gc1:
-    n_verde   = kpis["n_verde"]
-    n_amarillo= kpis["n_amarillo"]
-    n_rojo    = kpis["n_rojo"]
-    n_sin     = kpis["n_sin_entrada"]
-    labels    = ["Verde (1-3 días)", f"Amarillo (4-{policy_days} días)", f"Rojo (>{policy_days} días)", "Sin entrada"]
-    values    = [n_verde, n_amarillo, n_rojo, n_sin]
-    colors_d  = ["#00B050", "#FFC000", "#FF0000", "#BDBDBD"]
+    labels = [f"Oportuno (1–3 d)", f"En límite (4–{policy_days} d)", f"Vencido (>{policy_days} d)", "Sin entrada"]
+    values = [kpis["n_verde"], kpis["n_amarillo"], kpis["n_rojo"], kpis["n_sin_entrada"]]
+    colors_donut = [C_GREEN, C_AMBER, C_RED, C_SLATE]
 
     fig_donut = go.Figure(go.Pie(
-        labels=labels, values=values,
-        hole=0.55,
-        marker=dict(colors=colors_d, line=dict(color="#ffffff", width=2)),
-        textinfo="percent+value",
-        textfont=dict(size=12),
-        hovertemplate="<b>%{label}</b><br>Cantidad: %{value}<br>%{percent}<extra></extra>",
+        labels=labels, values=values, hole=0.6,
+        marker=dict(colors=colors_donut, line=dict(color="white", width=3)),
+        textinfo="percent", textfont=dict(size=12, color="white"),
+        hovertemplate="<b>%{label}</b><br>%{value} registros — %{percent}<extra></extra>",
+        direction="clockwise", sort=False,
     ))
     fig_donut.add_annotation(
-        text=f"<b>{kpis['total_lineas']}</b><br>líneas",
-        x=0.5, y=0.5, font_size=14, showarrow=False
+        text=f"<b>{kpis['total_lineas']}</b><br><span style='font-size:10px'>líneas</span>",
+        x=0.5, y=0.5, showarrow=False,
+        font=dict(size=18, color=C_NAVY),
     )
     fig_donut.update_layout(
-        title=dict(text="Distribución por Estado de Ingreso", font_size=14, x=0.5),
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5, font_size=11),
-        margin=dict(t=45, b=10, l=10, r=10),
-        height=280,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        **CHART_LAYOUT,
+        title=dict(text="Estado de Ingresos", font=dict(size=14, color=C_NAVY), x=0.5, xanchor="center"),
+        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center", font=dict(size=11)),
+        height=300,
     )
     st.plotly_chart(fig_donut, use_container_width=True)
 
-# Gráfica 2: Barras por origen
+# Barras — cumplimiento por origen + métricas secundarias
 with gc2:
     origen_kpis = kpis.get("por_origen", {})
-    if origen_kpis:
-        orig_names = list(origen_kpis.keys())
-        orig_vals  = [round(v, 1) if v is not None else 0 for v in origen_kpis.values()]
-        orig_colors= ["#2196F3" if v >= 80 else "#FF9800" if v >= 60 else "#F44336" for v in orig_vals]
+    if origen_kpis and any(v is not None for v in origen_kpis.values()):
+        names = list(origen_kpis.keys())
+        vals  = [round(v, 1) if v is not None else 0 for v in origen_kpis.values()]
+        bar_colors = [C_GREEN if v >= 80 else C_AMBER if v >= 60 else C_RED for v in vals]
 
-        fig_bar = go.Figure(go.Bar(
-            x=orig_names, y=orig_vals,
-            marker=dict(color=orig_colors, line=dict(color="#ffffff", width=1)),
-            text=[f"{v}%" for v in orig_vals],
-            textposition="outside",
-            textfont=dict(size=13, color="#333"),
-            hovertemplate="<b>%{x}</b><br>% Oportuno: %{y}%<extra></extra>",
+        fig_orig = go.Figure()
+        fig_orig.add_trace(go.Bar(
+            x=names, y=vals,
+            marker=dict(color=bar_colors, cornerradius=4),
+            text=[f"<b>{v}%</b>" for v in vals],
+            textposition="outside", textfont=dict(size=13),
+            hovertemplate="<b>%{x}</b><br>Cumplimiento: %{y}%<extra></extra>",
+            width=0.45,
         ))
-        fig_bar.add_hline(y=80, line_dash="dash", line_color="#2E7D32",
-                          annotation_text="Meta 80%", annotation_position="top right",
-                          annotation_font_size=10)
-        fig_bar.update_layout(
-            title=dict(text="Cumplimiento por Origen", font_size=14, x=0.5),
-            yaxis=dict(title="% Oportuno", range=[0, 110], ticksuffix="%", gridcolor="#eee"),
-            xaxis=dict(title=""),
-            margin=dict(t=45, b=10, l=10, r=10),
-            height=280,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+        fig_orig.add_hline(
+            y=80, line=dict(color=C_SLATE, dash="dot", width=1.5),
+            annotation=dict(text="Meta 80%", font=dict(size=10, color=C_SLATE),
+                            bgcolor="white", bordercolor=C_SLATE, borderpad=3),
+            annotation_position="top right",
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        fig_orig.update_layout(
+            **CHART_LAYOUT,
+            title=dict(text="Cumplimiento por Origen", font=dict(size=14, color=C_NAVY), x=0.5, xanchor="center"),
+            yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#F1F5F9",
+                       zeroline=False, tickfont=dict(size=11)),
+            xaxis=dict(tickfont=dict(size=12)),
+            height=300, showlegend=False,
+        )
+        st.plotly_chart(fig_orig, use_container_width=True)
     else:
-        st.info("Sin datos de origen.")
-
-# Gráfica 3: Indicadores secundarios (tarjetas mini)
-with gc3:
-    st.markdown("""
-    <div style="display:flex; flex-direction:column; gap:10px; padding-top:8px;">
-    """, unsafe_allow_html=True)
-
-    def mini_card(icon, label, val, color):
-        return f"""<div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px;
-                    padding:10px 14px; display:flex; align-items:center; gap:12px;">
-            <div style="font-size:22px;">{icon}</div>
-            <div>
-                <div style="font-size:11px; color:#666; text-transform:uppercase;">{label}</div>
-                <div style="font-size:20px; font-weight:700; color:{color};">{val}</div>
-            </div></div>"""
-
-    st.markdown(
-        mini_card("⚠️", "Con anulaciones", f"{kpis['pct_anulaciones']}%", "#E65100") +
-        mini_card("📦", "Ingresos parciales", f"{kpis['pct_parciales']}%", "#1565C0") +
-        mini_card("❌", "Sin entrada", kpis["n_sin_entrada"], "#C62828") +
-        mini_card("✅", "Verde (oportuno)", kpis["n_verde"], "#2E7D32"),
-        unsafe_allow_html=True
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+        # Si no hay datos de origen, mostrar barras de métricas generales
+        fig_gen = go.Figure(go.Bar(
+            x=["Oportunos", "Vencidos", "Anulaciones", "Parciales"],
+            y=[kpis["pct_oportuno"], kpis["pct_vencido"],
+               kpis["pct_anulaciones"], kpis["pct_parciales"]],
+            marker=dict(color=[C_GREEN, C_RED, C_AMBER, C_BLUE], cornerradius=4),
+            text=[f"<b>{v}%</b>" for v in [kpis["pct_oportuno"], kpis["pct_vencido"],
+                                             kpis["pct_anulaciones"], kpis["pct_parciales"]]],
+            textposition="outside",
+        ))
+        fig_gen.update_layout(
+            **CHART_LAYOUT,
+            title=dict(text="Indicadores Generales (%)", font=dict(size=14, color=C_NAVY), x=0.5),
+            yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#F1F5F9"),
+            height=300, showlegend=False,
+        )
+        st.plotly_chart(fig_gen, use_container_width=True)
 
 # ── Tabs de análisis ──────────────────────────────────────────────────────────
 
@@ -520,7 +531,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # -- Tab 1: Detalle --
 with tab1:
-    st.caption("Ordenado por días transcurridos (mayor a menor).")
+    st.caption("Ordenado por días transcurridos (mayor a menor). La columna Alerta indica el estado de cada ingreso.")
 
     display_cols = {
         "Material":      "_material_po",
@@ -546,66 +557,64 @@ with tab1:
     df_show.columns = [k for k, v in display_cols.items() if v in detail.columns]
     df_show = df_show.sort_values("Días", ascending=False, na_position="last")
 
-    def color_alert_row(row):
-        alerta = row.get("Alerta", "")
-        colors = {
-            "VERDE":       "background-color: #c6efce; color: #000000",
-            "AMARILLO":    "background-color: #ffeb9c; color: #000000",
-            "ROJO":        "background-color: #ffc7ce; color: #000000",
-            "SIN ENTRADA": "background-color: #eeeeee; color: #000000",
+    # Solo colorear la columna Alerta — filas limpias sin fondo rosado
+    def color_alerta_col(val):
+        m = {
+            "VERDE":       f"background-color:{C_GREEN}; color:white; font-weight:600; border-radius:4px",
+            "AMARILLO":    f"background-color:{C_AMBER}; color:white; font-weight:600; border-radius:4px",
+            "ROJO":        f"background-color:{C_RED};   color:white; font-weight:600; border-radius:4px",
+            "SIN ENTRADA": f"background-color:{C_SLATE}; color:white; font-weight:600; border-radius:4px",
         }
-        c = colors.get(alerta, "color: #000000")
-        return [c] * len(row)
+        return m.get(str(val), "")
 
-    styled = df_show.style.apply(color_alert_row, axis=1)
+    styled = df_show.style.map(color_alerta_col, subset=["Alerta"])
     st.dataframe(styled, use_container_width=True, height=500)
 
 # -- Tab 2: Análisis adicionales --
 with tab2:
     r1c1, r1c2 = st.columns(2)
 
-    # Gráfica: Top materiales por días promedio
     with r1c1:
-        st.markdown("**🏆 Top materiales por tiempo promedio de ingreso**")
+        st.markdown("##### 🏆 Top materiales — tiempo promedio de ingreso")
         if not top_mat.empty:
-            fig_mat = px.bar(
-                top_mat.sort_values("Días Promedio"),
-                x="Días Promedio", y="Material",
+            df_mat = top_mat.sort_values("Días Promedio")
+            fig_mat = go.Figure(go.Bar(
+                x=df_mat["Días Promedio"], y=df_mat["Material"],
                 orientation="h",
-                text="Días Promedio",
-                color="Días Promedio",
-                color_continuous_scale=["#00B050","#FFC000","#FF0000"],
-                labels={"Días Promedio": "Días promedio", "Material": ""},
-            )
-            fig_mat.update_traces(texttemplate="%{text:.1f} días", textposition="outside")
+                marker=dict(
+                    color=df_mat["Días Promedio"],
+                    colorscale=[[0, C_TEAL], [0.5, C_AMBER], [1, C_RED]],
+                    colorbar=dict(title="Días", thickness=10),
+                ),
+                text=df_mat["Días Promedio"].apply(lambda v: f"{v:.1f} d"),
+                textposition="outside", textfont=dict(size=11),
+                hovertemplate="<b>%{y}</b><br>Promedio: %{x:.1f} días<extra></extra>",
+            ))
             fig_mat.update_layout(
-                height=320, margin=dict(t=10, b=10, l=10, r=30),
-                coloraxis_showscale=False,
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(tickfont=dict(size=11)),
+                **CHART_LAYOUT, height=340,
+                xaxis=dict(title="Días promedio", gridcolor="#F1F5F9"),
+                yaxis=dict(tickfont=dict(size=10)),
             )
             st.plotly_chart(fig_mat, use_container_width=True)
         else:
             st.caption("Sin datos.")
 
-    # Gráfica: Usuarios con más vencidos
     with r1c2:
-        st.markdown("**👤 Usuarios con más ingresos vencidos**")
+        st.markdown("##### 👤 Usuarios con más ingresos vencidos")
         if not top_users.empty:
-            fig_usr = px.bar(
-                top_users.sort_values("Ingresos Vencidos"),
-                x="Ingresos Vencidos", y="Usuario",
+            df_usr = top_users.sort_values("Ingresos Vencidos")
+            fig_usr = go.Figure(go.Bar(
+                x=df_usr["Ingresos Vencidos"], y=df_usr["Usuario"],
                 orientation="h",
-                text="Ingresos Vencidos",
-                color="Ingresos Vencidos",
-                color_continuous_scale=["#FF9800","#F44336"],
-                labels={"Ingresos Vencidos": "Ingresos vencidos", "Usuario": ""},
-            )
-            fig_usr.update_traces(textposition="outside")
+                marker=dict(color=C_RED, opacity=0.85, cornerradius=4),
+                text=df_usr["Ingresos Vencidos"],
+                textposition="outside", textfont=dict(size=11),
+                hovertemplate="<b>%{y}</b><br>Vencidos: %{x}<extra></extra>",
+            ))
             fig_usr.update_layout(
-                height=320, margin=dict(t=10, b=10, l=10, r=30),
-                coloraxis_showscale=False,
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                **CHART_LAYOUT, height=340,
+                xaxis=dict(title="Ingresos vencidos", gridcolor="#F1F5F9"),
+                yaxis=dict(tickfont=dict(size=11)),
             )
             st.plotly_chart(fig_usr, use_container_width=True)
         else:
@@ -613,42 +622,39 @@ with tab2:
 
     r2c1, r2c2 = st.columns(2)
 
-    # Gráfica: Importe pendiente por material
     with r2c1:
-        st.markdown("**💰 Materiales con mayor importe pendiente**")
+        st.markdown("##### 💰 Mayor importe pendiente por material")
         if not top_pend.empty:
-            fig_pend = px.bar(
-                top_pend.sort_values("Importe Pendiente"),
-                x="Importe Pendiente", y="Material",
+            df_p = top_pend.sort_values("Importe Pendiente")
+            fig_pend = go.Figure(go.Bar(
+                x=df_p["Importe Pendiente"], y=df_p["Material"],
                 orientation="h",
-                text="Importe Pendiente",
-                color_discrete_sequence=["#1565C0"],
-                labels={"Importe Pendiente": "Importe pendiente", "Material": ""},
-            )
-            fig_pend.update_traces(
-                texttemplate="%{text:,.0f}",
-                textposition="outside",
-            )
+                marker=dict(color=C_BLUE, opacity=0.85, cornerradius=4),
+                text=df_p["Importe Pendiente"].apply(lambda v: f"{v:,.0f}"),
+                textposition="outside", textfont=dict(size=11),
+                hovertemplate="<b>%{y}</b><br>Pendiente: %{x:,.0f}<extra></extra>",
+            ))
             fig_pend.update_layout(
-                height=320, margin=dict(t=10, b=10, l=10, r=30),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                **CHART_LAYOUT, height=340,
+                xaxis=dict(title="Importe pendiente", gridcolor="#F1F5F9"),
+                yaxis=dict(tickfont=dict(size=10)),
             )
             st.plotly_chart(fig_pend, use_container_width=True)
         else:
             st.caption("Sin datos.")
 
-    # Tabla: anulaciones
     with r2c2:
-        st.markdown("**🔄 Tasa de anulaciones por origen y usuario**")
+        st.markdown("##### 🔄 Tasa de anulaciones por origen y usuario")
         if not cancel_df.empty:
             def color_cancel(val):
                 if isinstance(val, (int, float)):
-                    if val >= 50: return "background-color:#FF9800; color:#000"
-                    if val >= 20: return "background-color:#FFE0B2; color:#000"
+                    if val >= 50: return f"background-color:{C_RED};   color:white; font-weight:600"
+                    if val >= 20: return f"background-color:{C_AMBER}; color:white; font-weight:600"
+                    if val >  0:  return f"background-color:{C_TEAL};  color:white"
                 return ""
             st.dataframe(
                 cancel_df.style.map(color_cancel, subset=["% Anulación"]),
-                use_container_width=True, hide_index=True, height=320,
+                use_container_width=True, hide_index=True, height=340,
             )
         else:
             st.caption("Sin datos.")
@@ -659,53 +665,72 @@ with tab3:
 
     def trend_chart(df_trend, title):
         if df_trend.empty:
-            st.caption("Sin suficientes datos.")
+            st.caption("Sin suficientes datos para calcular tendencia.")
             return
         df_trend = df_trend.copy()
         df_trend["Período"] = df_trend["Período"].astype(str).str[:10]
+
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=df_trend["Período"], y=df_trend["% Oportuno"],
-            mode="lines+markers+text",
-            name="% Oportuno",
-            line=dict(color="#2F5597", width=2.5),
-            marker=dict(size=8, color="#2F5597"),
-            text=df_trend["% Oportuno"].apply(lambda v: f"{v:.0f}%"),
-            textposition="top center",
-            textfont=dict(size=11),
-            fill="tozeroy",
-            fillcolor="rgba(47,85,151,0.08)",
+            mode="lines+markers",
+            line=dict(color=C_BLUE, width=2.5, shape="spline"),
+            marker=dict(size=8, color="white", line=dict(color=C_BLUE, width=2.5)),
+            fill="tozeroy", fillcolor=f"rgba(37,99,235,0.07)",
+            hovertemplate="<b>%{x}</b><br>% Oportuno: %{y:.1f}%<extra></extra>",
         ))
-        fig.add_hline(y=80, line_dash="dash", line_color="#2E7D32",
-                      annotation_text="Meta 80%", annotation_font_size=10)
+        # Puntos coloreados por umbral
+        for _, row in df_trend.iterrows():
+            c = C_GREEN if row["% Oportuno"] >= 80 else C_AMBER if row["% Oportuno"] >= 60 else C_RED
+            fig.add_trace(go.Scatter(
+                x=[row["Período"]], y=[row["% Oportuno"]],
+                mode="markers+text",
+                marker=dict(size=10, color=c),
+                text=[f"{row['% Oportuno']:.0f}%"],
+                textposition="top center", textfont=dict(size=10),
+                showlegend=False,
+                hoverinfo="skip",
+            ))
+        fig.add_hline(
+            y=80, line=dict(color=C_SLATE, dash="dot", width=1.5),
+            annotation=dict(text="Meta 80%", font=dict(size=10, color=C_SLATE),
+                            bgcolor="white", borderpad=3),
+            annotation_position="top right",
+        )
         fig.update_layout(
-            title=dict(text=title, font_size=14, x=0.5),
-            yaxis=dict(range=[0, 110], ticksuffix="%", gridcolor="#eee", title="% Oportuno"),
-            xaxis=dict(title="", tickangle=-30),
-            height=320, margin=dict(t=45, b=40, l=10, r=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            showlegend=False,
+            **CHART_LAYOUT,
+            title=dict(text=title, font=dict(size=14, color=C_NAVY), x=0.5, xanchor="center"),
+            yaxis=dict(range=[0, 110], ticksuffix="%", gridcolor="#F1F5F9",
+                       zeroline=False, title="% Oportuno"),
+            xaxis=dict(tickangle=-30, gridcolor="#F1F5F9"),
+            height=340, showlegend=False,
         )
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(df_trend, use_container_width=True, hide_index=True)
 
     with col_w:
-        trend_chart(weekly, "Tendencia Semanal — % Ingresos Oportunos")
+        trend_chart(weekly,  "Tendencia Semanal")
     with col_m:
-        trend_chart(monthly, "Tendencia Mensual — % Ingresos Oportunos")
+        trend_chart(monthly, "Tendencia Mensual")
 
 # -- Tab 4: Recomendaciones --
 with tab4:
     if recs:
         for i, rec in enumerate(recs, 1):
-            color = "#C62828" if "PRIORIDAD ALTA" in rec else "#E65100" if i == 1 else "#1565C0"
-            icon  = "🚨" if "PRIORIDAD ALTA" in rec else "⚠️" if i <= 2 else "💡"
+            is_alta = "PRIORIDAD ALTA" in rec
+            color = C_RED if is_alta else C_AMBER if i <= 2 else C_BLUE
+            icon  = "🚨" if is_alta else "⚠️" if i <= 2 else "💡"
+            label = "Prioridad Alta" if is_alta else "Atención" if i <= 2 else "Sugerencia"
             st.markdown(f"""
-            <div style="background:{color}08; border-left:4px solid {color};
-                        border-radius:6px; padding:14px 18px; margin-bottom:10px;">
+            <div style="background:white; border-left:4px solid {color};
+                        border-radius:8px; padding:16px 20px; margin-bottom:12px;
+                        box-shadow:0 1px 3px rgba(0,0,0,0.07);">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
                 <span style="font-size:16px;">{icon}</span>
-                <span style="font-weight:600; color:{color}; margin-left:6px;">Recomendación {i}</span>
-                <p style="margin:6px 0 0 0; color:#333; line-height:1.5;">{rec}</p>
+                <span style="font-size:11px; font-weight:700; color:{color};
+                             text-transform:uppercase; letter-spacing:0.5px;">{label} · #{i}</span>
+              </div>
+              <p style="margin:0; color:#374151; line-height:1.6; font-size:14px;">{rec}</p>
             </div>""", unsafe_allow_html=True)
     else:
         st.success("✅ No se detectaron problemas críticos que recomienden acción inmediata.")
