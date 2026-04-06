@@ -657,7 +657,173 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # -- Tab 1: Detalle --
 with tab1:
-    st.caption("Ordenado por días transcurridos (mayor a menor). La columna Alerta indica el estado de cada ingreso.")
+
+    # ── Selector de material para ficha ampliada ──────────────────────────────
+    from datetime import datetime
+
+    materiales_unicos = sorted(
+        detail["_material_po"].dropna().astype(str).unique().tolist()
+    )
+    mat_labels = {
+        row["_material_po"]: f"{row['_material_po']} — {row['_description']}"
+        for _, row in detail.drop_duplicates("_material_po").iterrows()
+        if str(row["_material_po"]) != "nan"
+    }
+
+    sel_mat = st.selectbox(
+        "🔍 Selecciona un material para ver su ficha detallada",
+        options=["(ninguno)"] + materiales_unicos,
+        format_func=lambda x: mat_labels.get(x, x),
+    )
+
+    if sel_mat != "(ninguno)":
+        filas = detail[detail["_material_po"].astype(str) == sel_mat].copy()
+        today = pd.Timestamp(datetime.today().date())
+
+        for _, fila in filas.iterrows():
+            po_date   = fila.get("_po_doc_date")
+            acc_date  = fila.get("last_acc_date")
+            alerta    = str(fila.get("alerta", ""))
+            dias      = fila.get("dias_transcurridos")
+            pedido    = fila.get("_order", "")
+            pos       = fila.get("_position", "")
+            origen    = fila.get("origen", "")
+            qty_ord   = fila.get("_qty_ordered", 0)
+            qty_neta  = fila.get("qty_neta", 0)
+            qty_pend  = fila.get("qty_pendiente", 0)
+            importe   = fila.get("amount_101", 0)
+            usuarios  = fila.get("users_101", "")
+            descripcion = fila.get("_description", "")
+
+            # Calcular días hasta vencimiento o días vencido
+            color_card = {
+                "VERDE": C_GREEN, "AMARILLO": C_AMBER,
+                "ROJO": C_RED, "SIN ENTRADA": C_SLATE,
+            }.get(alerta, C_SLATE)
+
+            # Días desde hoy sin ingreso (para SIN ENTRADA)
+            if alerta == "SIN ENTRADA" and pd.notna(po_date):
+                dias_sin_ingreso = (today - po_date).days
+                dias_para_vencer = policy_days - dias_sin_ingreso
+                if dias_para_vencer > 0:
+                    estado_texto = f"⏳ Sin ingreso — faltan <b>{dias_para_vencer} día(s)</b> para vencer el plazo"
+                    estado_color = C_AMBER
+                else:
+                    estado_texto = f"🚨 Sin ingreso — vencido hace <b>{abs(dias_para_vencer)} día(s)</b> (plazo: {policy_days} días)"
+                    estado_color = C_RED
+            elif alerta == "ROJO" and pd.notna(dias):
+                exceso = int(dias) - policy_days
+                estado_texto = f"🚨 Ingreso registrado con <b>{exceso} día(s) de exceso</b> sobre el plazo de {policy_days} días"
+                estado_color = C_RED
+            elif alerta == "AMARILLO" and pd.notna(dias):
+                estado_texto = f"⚠️ Ingreso registrado en el límite — <b>{int(dias)} días</b> (política: {policy_days} días)"
+                estado_color = C_AMBER
+            elif alerta == "VERDE" and pd.notna(dias):
+                estado_texto = f"✅ Ingreso oportuno — registrado en <b>{int(dias)} días</b>"
+                estado_color = C_GREEN
+            else:
+                estado_texto = "Sin información de fechas"
+                estado_color = C_SLATE
+
+            # Barra de progreso visual
+            if pd.notna(po_date):
+                if alerta == "SIN ENTRADA":
+                    dias_trans_show = (today - po_date).days
+                else:
+                    dias_trans_show = int(dias) if pd.notna(dias) else 0
+                pct_plazo = min(int(dias_trans_show / policy_days * 100), 150)
+                bar_color = C_GREEN if pct_plazo <= 60 else C_AMBER if pct_plazo <= 100 else C_RED
+                bar_width  = min(pct_plazo, 100)
+            else:
+                dias_trans_show = 0
+                pct_plazo = 0
+                bar_color = C_SLATE
+                bar_width = 0
+
+            # Fechas formateadas
+            po_str  = po_date.strftime("%d/%m/%Y")  if pd.notna(po_date)  else "—"
+            acc_str = acc_date.strftime("%d/%m/%Y") if pd.notna(acc_date) else "Pendiente"
+
+            st.markdown(f"""
+            <div style="background:white; border-radius:12px; padding:20px 24px;
+                        border-left:5px solid {color_card}; margin-bottom:16px;
+                        box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+              <!-- Encabezado -->
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
+                <div>
+                  <div style="font-size:18px; font-weight:700; color:{C_NAVY};">{sel_mat}</div>
+                  <div style="font-size:13px; color:{C_SLATE}; margin-top:2px;">{descripcion}</div>
+                </div>
+                <div style="background:{color_card}15; border:1px solid {color_card};
+                            border-radius:20px; padding:4px 14px; font-size:12px;
+                            font-weight:700; color:{color_card};">{alerta}</div>
+              </div>
+
+              <!-- Estado principal -->
+              <div style="background:{estado_color}10; border-radius:8px; padding:10px 14px;
+                          margin-bottom:14px; font-size:13px; color:#374151;">
+                {estado_texto}
+              </div>
+
+              <!-- Barra de plazo -->
+              <div style="margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; font-size:11px;
+                            color:{C_SLATE}; margin-bottom:4px;">
+                  <span>Progreso del plazo ({dias_trans_show} de {policy_days} días)</span>
+                  <span>{pct_plazo}%</span>
+                </div>
+                <div style="background:#F1F5F9; border-radius:999px; height:8px; overflow:hidden;">
+                  <div style="width:{bar_width}%; background:{bar_color};
+                              height:8px; border-radius:999px; transition:width 0.3s;"></div>
+                </div>
+              </div>
+
+              <!-- Grid de datos -->
+              <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px;">
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Pedido / Pos.</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_NAVY};">{pedido} / {pos}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Origen</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_NAVY};">{origen}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Fecha Pedido</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_NAVY};">{po_str}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Fecha Ingreso</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_NAVY if acc_str != 'Pendiente' else C_RED};">{acc_str}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Qty Ordenada</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_NAVY};">{qty_ord:,.0f}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Qty Ingresada</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_GREEN};">{qty_neta:,.0f}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Qty Pendiente</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_RED if qty_pend > 0 else C_GREEN};">{qty_pend:,.0f}</div>
+                </div>
+                <div style="background:#F8FAFC; border-radius:8px; padding:10px 12px;">
+                  <div style="font-size:10px; color:{C_SLATE}; text-transform:uppercase; font-weight:600;">Importe ML</div>
+                  <div style="font-size:14px; font-weight:600; color:{C_NAVY};">{importe:,.0f}</div>
+                </div>
+              </div>
+
+              <!-- Usuario -->
+              <div style="margin-top:10px; font-size:12px; color:{C_SLATE};">
+                👤 Registrado por: <b>{usuarios if usuarios else '—'}</b>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.divider()
+    st.caption("Tabla completa — ordenada por días transcurridos (mayor a menor).")
 
     display_cols = {
         "Material":      "_material_po",
