@@ -97,6 +97,105 @@ if st.session_state.get("authentication_status") is not True:
 
 # ── App principal (solo si está autenticado) ──────────────────────────────────
 
+# ── Funciones de plantillas (definidas antes del sidebar) ─────────────────────
+
+@st.cache_data(show_spinner=False)
+def generar_plantilla_mb51():
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    AZUL="FF2F5597"; BLANCO="FFFFFFFF"; AMARILLO="FFFFF2CC"; VERDE="FFE2EFDA"
+    def hc(cell, texto, bg=AZUL):
+        cell.value=texto; cell.fill=PatternFill("solid",fgColor=bg)
+        cell.font=Font(bold=True,color=BLANCO if bg==AZUL else "FF000000",size=10)
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        t=Side(style="thin",color="FF000000"); cell.border=Border(left=t,right=t,top=t,bottom=t)
+    def dc(cell,valor,bg=None,italic=False,size=10):
+        cell.value=valor
+        if bg: cell.fill=PatternFill("solid",fgColor=bg)
+        cell.font=Font(size=size,italic=italic,color="FF595959" if italic else "FF000000")
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        t=Side(style="thin",color="FFD9D9D9"); cell.border=Border(left=t,right=t,top=t,bottom=t)
+    wb=openpyxl.Workbook(); ws=wb.active; ws.title="MB51 - Movimientos"
+    ws.merge_cells("A1:R1"); ws["A1"].value="PLANTILLA MB51 — Movimientos de Materiales (Exportación SAP)"
+    ws["A1"].fill=PatternFill("solid",fgColor=AZUL); ws["A1"].font=Font(bold=True,color=BLANCO,size=12)
+    ws["A1"].alignment=Alignment(horizontal="center",vertical="center"); ws.row_dimensions[1].height=25
+    ws.merge_cells("A2:R2"); ws["A2"].value="FORMATO: Exportar desde SAP transacción MB51 como .TXT o .CSV separado por punto y coma (;). Movimiento 101 = Ingreso | 102 = Anulación"
+    ws["A2"].fill=PatternFill("solid",fgColor=AMARILLO); ws["A2"].font=Font(color="FF7F6000",size=10,italic=True)
+    ws["A2"].alignment=Alignment(horizontal="center",vertical="center",wrap_text=True); ws.row_dimensions[2].height=30
+    cols=[("Material","Código material SAP\nEj: 100001234"),("Texto breve de material","Descripción del material"),
+          ("CMv","Tipo movimiento\n101=Ingreso\n102=Anulación"),("Alm.","Código almacén\nEj: HB01"),
+          ("Pedido","N° pedido compra\nEj: 4500001234"),("Pos.","Posición pedido\nEj: 10"),
+          ("Doc.mat.","N° documento material"),("Pos","Posición documento\nEj: 1"),
+          ("Cantidad","Cantidad\nComa decimal\nEj: 10,000"),("UMB","Unidad medida\nEj: UN, KG, M"),
+          ("Fecha doc.","Fecha documento\nDD.MM.AAAA"),("Reserva","N° reserva\nPuede ir vacío"),
+          ("Fe.contab.","Fecha contabilización\nDD.MM.AAAA"),("Hora","Hora movimiento\nEj: 14:30:00"),
+          ("Importe ML","Importe moneda local\nEj: 1.500,00"),("Texto cab.documento","Texto cabecera\nPuede ir vacío"),
+          ("Referencia","Referencia externa\nPuede ir vacío"),("Usuario","Usuario SAP\nEj: JPEREZ")]
+    for i,(n,_) in enumerate(cols,1):
+        hc(ws.cell(3,i),n); ws.column_dimensions[get_column_letter(i)].width=16
+    ws.row_dimensions[3].height=20
+    for i,(_,t) in enumerate(cols,1): dc(ws.cell(4,i),t,bg="FFF2F2F2",italic=True,size=8)
+    ws.row_dimensions[4].height=60
+    for r,row in enumerate([
+        ["100001234","VALVULA ESFERICA 1","101","HB01","4500001234","10","5000001001","1","10,000","UN","01.03.2024","","05.03.2024","10:30:00","1.500,00","","","JPEREZ"],
+        ["100001234","VALVULA ESFERICA 1","101","HB01","4500001234","20","5000001002","1","5,000","UN","01.03.2024","","04.03.2024","09:15:00","750,00","","","MGARCIA"],
+        ["100002567","TORNILLO HEX M12x50","101","HB02","4500001235","10","5000001003","1","100,000","UN","01.03.2024","","15.03.2024","14:00:00","200,00","","","JPEREZ"],
+        ["100002567","TORNILLO HEX M12x50","102","HB02","4500001235","10","5000001004","1","20,000","UN","01.03.2024","","16.03.2024","11:00:00","40,00","ANULACION","","MGARCIA"],
+        ["100003891","TUBO ACERO 2 SCH40","101","HB01","4500001236","10","5000001005","1","50,000","M","05.03.2024","","07.03.2024","08:45:00","5.000,00","","","CLOPEZ"],
+    ],5):
+        bg=VERDE if row[2]=="101" else "FFFFCCCC"
+        for c,v in enumerate(row,1): dc(ws.cell(r,c),v,bg=bg)
+        ws.row_dimensions[r].height=18
+    ws.freeze_panes="A5"; buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
+
+
+@st.cache_data(show_spinner=False)
+def generar_plantilla_pedidos():
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    AZUL="FF2F5597"; BLANCO="FFFFFFFF"; AMARILLO="FFFFF2CC"; VERDE="FFE2EFDA"
+    def hc(cell,texto,bg=AZUL):
+        cell.value=texto; cell.fill=PatternFill("solid",fgColor=bg)
+        cell.font=Font(bold=True,color=BLANCO if bg==AZUL else "FF000000",size=10)
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        t=Side(style="thin",color="FF000000"); cell.border=Border(left=t,right=t,top=t,bottom=t)
+    def dc(cell,valor,bg=None,italic=False,size=10):
+        cell.value=valor
+        if bg: cell.fill=PatternFill("solid",fgColor=bg)
+        cell.font=Font(size=size,italic=italic,color="FF595959" if italic else "FF000000")
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        t=Side(style="thin",color="FFD9D9D9"); cell.border=Border(left=t,right=t,top=t,bottom=t)
+    wb=openpyxl.Workbook(); ws=wb.active; ws.title="Pedidos - Doc. Compra"
+    ws.merge_cells("A1:J1"); ws["A1"].value="PLANTILLA PEDIDOS — Documentos de Compra (Exportación SAP)"
+    ws["A1"].fill=PatternFill("solid",fgColor=AZUL); ws["A1"].font=Font(bold=True,color=BLANCO,size=12)
+    ws["A1"].alignment=Alignment(horizontal="center",vertical="center"); ws.row_dimensions[1].height=25
+    ws.merge_cells("A2:J2"); ws["A2"].value="FORMATO: Exportar desde SAP transacciones ME2M / ME2L como .TXT o .CSV separado por punto y coma (;)."
+    ws["A2"].fill=PatternFill("solid",fgColor=AMARILLO); ws["A2"].font=Font(color="FF7F6000",size=10,italic=True)
+    ws["A2"].alignment=Alignment(horizontal="center",vertical="center",wrap_text=True); ws.row_dimensions[2].height=25
+    cols=[("Material","Código material SAP\nEj: 100001234"),("Texto breve","Descripción del material"),
+          ("Cantidad","Cantidad total pedido\nComa decimal\nEj: 15,000"),("Por entrg.","Cantidad pendiente\npor entregar\nEj: 5,000"),
+          ("UMP","Unidad de medida\nEj: UN, KG, M"),("Fecha doc.","Fecha del pedido\nDD.MM.AAAA\nEj: 01.03.2024"),
+          ("Doc.compr.","N° documento compra\nEj: 4500001234"),("Pos.","Posición pedido\nEj: 10"),
+          ("Proveedor/Centro suministrador","Nombre proveedor o\ncentro suministrador\nEj: La Estrella / Taller"),("Mon.","Moneda\nEj: CLP, USD")]
+    for i,(n,_) in enumerate(cols,1):
+        hc(ws.cell(3,i),n); ws.column_dimensions[get_column_letter(i)].width=20
+    ws.row_dimensions[3].height=20
+    for i,(_,t) in enumerate(cols,1): dc(ws.cell(4,i),t,bg="FFF2F2F2",italic=True,size=8)
+    ws.row_dimensions[4].height=60
+    for r,row in enumerate([
+        ["100001234","VALVULA ESFERICA 1","15,000","0,000","UN","01.03.2024","4500001234","10","Almacen La Estrella","CLP"],
+        ["100001234","VALVULA ESFERICA 1","10,000","0,000","UN","01.03.2024","4500001234","20","Almacen La Estrella","CLP"],
+        ["100002567","TORNILLO HEX M12x50","100,000","20,000","UN","01.03.2024","4500001235","10","Taller Central","CLP"],
+        ["100003891","TUBO ACERO 2 SCH40","50,000","0,000","M","05.03.2024","4500001236","10","Almacen La Estrella","CLP"],
+        ["100004512","BRIDA SLIP-ON 2","30,000","30,000","UN","10.03.2024","4500001237","10","Taller Central","CLP"],
+    ],5):
+        for c,v in enumerate(row,1): dc(ws.cell(r,c),v,bg=VERDE)
+        ws.row_dimensions[r].height=18
+    ws.freeze_panes="A5"; buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
+
+
 # Sidebar
 with st.sidebar:
     st.markdown(f"### 👤 {st.session_state.get('name', 'Usuario')}")
@@ -114,9 +213,7 @@ with st.sidebar:
     )
     st.caption(f"🟢 Verde: 1–3 días  \n🟡 Amarillo: 4–{policy_days} días  \n🔴 Rojo: >{policy_days} días")
     st.divider()
-
-    st.markdown("### 📄 Plantillas SAP")
-    st.caption("Descarga los formatos de ejemplo para preparar tus archivos.")
+    st.caption("v1.0 · Materiales en Tránsito")
 
     @st.cache_data(show_spinner=False)
     def generar_plantilla_mb51():
@@ -438,85 +535,115 @@ c5.markdown(kpi_card("Imp. Pendiente",  f"{kpis['importe_pendiente_total']:,.0f}
 
 st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
 
-# ── Fila de gráficas ──────────────────────────────────────────────────────────
-gc1, gc2 = st.columns(2)
+# ── Fila de gráficas — 3 columnas ────────────────────────────────────────────
+gc1, gc2, gc3 = st.columns(3)
 
-# Donut — estado de ingresos
+# Gráfica 1: Donut — estado de ingresos
 with gc1:
-    labels = [f"Oportuno (1–3 d)", f"En límite (4–{policy_days} d)", f"Vencido (>{policy_days} d)", "Sin entrada"]
+    labels = ["Oportuno", "En límite", "Vencido", "Sin entrada"]
     values = [kpis["n_verde"], kpis["n_amarillo"], kpis["n_rojo"], kpis["n_sin_entrada"]]
-    colors_donut = [C_GREEN, C_AMBER, C_RED, C_SLATE]
+    colors_donut = [C_GREEN, C_AMBER, C_RED, "#94A3B8"]
 
     fig_donut = go.Figure(go.Pie(
-        labels=labels, values=values, hole=0.6,
-        marker=dict(colors=colors_donut, line=dict(color="white", width=3)),
-        textinfo="percent", textfont=dict(size=12, color="white"),
-        hovertemplate="<b>%{label}</b><br>%{value} registros — %{percent}<extra></extra>",
+        labels=labels, values=values, hole=0.62,
+        marker=dict(colors=colors_donut, line=dict(color="white", width=2.5)),
+        textinfo="label+percent",
+        textposition="outside",
+        textfont=dict(size=11),
+        hovertemplate="<b>%{label}</b><br>%{value} registros (%{percent})<extra></extra>",
         direction="clockwise", sort=False,
+        showlegend=False,
     ))
     fig_donut.add_annotation(
-        text=f"<b>{kpis['total_lineas']}</b><br><span style='font-size:10px'>líneas</span>",
+        text=f"<b>{kpis['total_lineas']}</b><br>líneas",
         x=0.5, y=0.5, showarrow=False,
-        font=dict(size=18, color=C_NAVY),
+        font=dict(size=16, color=C_NAVY, family="Arial"),
     )
     fig_donut.update_layout(
         **CHART_LAYOUT,
-        title=dict(text="Estado de Ingresos", font=dict(size=14, color=C_NAVY), x=0.5, xanchor="center"),
-        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center", font=dict(size=11)),
-        height=300,
+        title=dict(text="Estado de Ingresos", font=dict(size=13, color=C_NAVY),
+                   x=0.5, xanchor="center", y=0.97),
+        height=310,
+        margin=dict(t=40, b=40, l=60, r=60),
     )
     st.plotly_chart(fig_donut, use_container_width=True)
 
-# Barras — cumplimiento por origen + métricas secundarias
+# Gráfica 2: Barras horizontales — % oportuno y vencido por origen
 with gc2:
     origen_kpis = kpis.get("por_origen", {})
-    if origen_kpis and any(v is not None for v in origen_kpis.values()):
-        names = list(origen_kpis.keys())
-        vals  = [round(v, 1) if v is not None else 0 for v in origen_kpis.values()]
-        bar_colors = [C_GREEN if v >= 80 else C_AMBER if v >= 60 else C_RED for v in vals]
+    valid_origins = {k: v for k, v in origen_kpis.items() if v is not None}
+
+    if valid_origins:
+        names = list(valid_origins.keys())
+        pct_op = [round(v, 1) for v in valid_origins.values()]
+        pct_venc = [round(100 - v, 1) for v in valid_origins.values()]
 
         fig_orig = go.Figure()
         fig_orig.add_trace(go.Bar(
-            x=names, y=vals,
-            marker=dict(color=bar_colors, cornerradius=4),
-            text=[f"<b>{v}%</b>" for v in vals],
-            textposition="outside", textfont=dict(size=13),
-            hovertemplate="<b>%{x}</b><br>Cumplimiento: %{y}%<extra></extra>",
-            width=0.45,
+            name="Oportuno", y=names, x=pct_op, orientation="h",
+            marker=dict(color=C_GREEN, opacity=0.9),
+            text=[f"{v}%" for v in pct_op], textposition="inside",
+            textfont=dict(color="white", size=12, family="Arial Bold"),
+            hovertemplate="<b>%{y}</b><br>Oportuno: %{x}%<extra></extra>",
         ))
-        fig_orig.add_hline(
-            y=80, line=dict(color=C_SLATE, dash="dot", width=1.5),
-            annotation=dict(text="Meta 80%", font=dict(size=10, color=C_SLATE),
-                            bgcolor="white", bordercolor=C_SLATE, borderpad=3),
-            annotation_position="top right",
-        )
+        fig_orig.add_trace(go.Bar(
+            name="Vencido", y=names, x=pct_venc, orientation="h",
+            marker=dict(color=C_RED, opacity=0.75),
+            text=[f"{v}%" for v in pct_venc], textposition="inside",
+            textfont=dict(color="white", size=12),
+            hovertemplate="<b>%{y}</b><br>Vencido: %{x}%<extra></extra>",
+        ))
         fig_orig.update_layout(
             **CHART_LAYOUT,
-            title=dict(text="Cumplimiento por Origen", font=dict(size=14, color=C_NAVY), x=0.5, xanchor="center"),
-            yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#F1F5F9",
-                       zeroline=False, tickfont=dict(size=11)),
-            xaxis=dict(tickfont=dict(size=12)),
-            height=300, showlegend=False,
+            title=dict(text="Cumplimiento por Origen", font=dict(size=13, color=C_NAVY),
+                       x=0.5, xanchor="center", y=0.97),
+            barmode="stack",
+            xaxis=dict(range=[0, 100], ticksuffix="%", gridcolor="#F1F5F9", tickfont=dict(size=10)),
+            yaxis=dict(tickfont=dict(size=11)),
+            legend=dict(orientation="h", y=-0.18, x=0.5, xanchor="center", font=dict(size=10)),
+            height=310,
+            margin=dict(t=40, b=50, l=10, r=10),
         )
         st.plotly_chart(fig_orig, use_container_width=True)
     else:
-        # Si no hay datos de origen, mostrar barras de métricas generales
-        fig_gen = go.Figure(go.Bar(
-            x=["Oportunos", "Vencidos", "Anulaciones", "Parciales"],
-            y=[kpis["pct_oportuno"], kpis["pct_vencido"],
-               kpis["pct_anulaciones"], kpis["pct_parciales"]],
-            marker=dict(color=[C_GREEN, C_RED, C_AMBER, C_BLUE], cornerradius=4),
-            text=[f"<b>{v}%</b>" for v in [kpis["pct_oportuno"], kpis["pct_vencido"],
-                                             kpis["pct_anulaciones"], kpis["pct_parciales"]]],
+        st.info("Sin datos de origen para mostrar.")
+
+# Gráfica 3: Indicadores de gestión — barras verticales
+with gc3:
+    indicadores = ["% Oportuno", "% Vencido", "% Parciales", "% Anulaciones"]
+    valores = [kpis["pct_oportuno"], kpis["pct_vencido"],
+               kpis["pct_parciales"], kpis["pct_anulaciones"]]
+    colores = [C_GREEN, C_RED, C_BLUE, C_AMBER]
+
+    fig_ind = go.Figure()
+    for label, val, color in zip(indicadores, valores, colores):
+        fig_ind.add_trace(go.Bar(
+            x=[label], y=[val],
+            name=label,
+            marker=dict(color=color, opacity=0.88, cornerradius=5),
+            text=[f"<b>{val}%</b>"],
             textposition="outside",
+            textfont=dict(size=12),
+            hovertemplate=f"<b>{label}</b>: {val}%<extra></extra>",
+            width=0.55,
         ))
-        fig_gen.update_layout(
-            **CHART_LAYOUT,
-            title=dict(text="Indicadores Generales (%)", font=dict(size=14, color=C_NAVY), x=0.5),
-            yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#F1F5F9"),
-            height=300, showlegend=False,
-        )
-        st.plotly_chart(fig_gen, use_container_width=True)
+    fig_ind.add_hline(
+        y=80, line=dict(color=C_SLATE, dash="dot", width=1.2),
+        annotation=dict(text="Meta", font=dict(size=9, color=C_SLATE)),
+        annotation_position="top right",
+    )
+    fig_ind.update_layout(
+        **CHART_LAYOUT,
+        title=dict(text="Indicadores de Gestión", font=dict(size=13, color=C_NAVY),
+                   x=0.5, xanchor="center", y=0.97),
+        yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#F1F5F9",
+                   zeroline=False, tickfont=dict(size=10)),
+        xaxis=dict(tickfont=dict(size=10)),
+        showlegend=False,
+        height=310,
+        margin=dict(t=40, b=20, l=10, r=10),
+    )
+    st.plotly_chart(fig_ind, use_container_width=True)
 
 # ── Tabs de análisis ──────────────────────────────────────────────────────────
 
