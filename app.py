@@ -299,28 +299,13 @@ with st.sidebar:
         wb.save(buf)
         return buf.getvalue()
 
-    st.download_button(
-        label="⬇️ Plantilla MB51",
-        data=generar_plantilla_mb51(),
-        file_name="Plantilla_MB51.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
-    st.download_button(
-        label="⬇️ Plantilla Pedidos",
-        data=generar_plantilla_pedidos(),
-        file_name="Plantilla_Pedidos.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
     st.divider()
     st.caption("v1.0 · Materiales en Tránsito")
 
 # Título principal
 st.title("📦 Análisis de Materiales en Tránsito")
-st.caption("Carga los dos archivos SAP para generar el análisis completo.")
 
-# ── Carga de archivos ─────────────────────────────────────────────────────────
+# ── Carga de archivos + Plantillas ────────────────────────────────────────────
 
 col_a, col_b = st.columns(2)
 with col_a:
@@ -329,11 +314,25 @@ with col_a:
         type=["csv", "txt", "xlsx"],
         help="Exportación de la transacción MB51 de SAP."
     )
+    st.download_button(
+        label="📄 Descargar plantilla MB51",
+        data=generar_plantilla_mb51(),
+        file_name="Plantilla_MB51.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
 with col_b:
     po_file = st.file_uploader(
         "📂 Archivo de Pedidos (Documentos de compra)",
         type=["csv", "txt", "xlsx"],
         help="Exportación del listado de pedidos/documentos de compra de SAP."
+    )
+    st.download_button(
+        label="📄 Descargar plantilla Pedidos",
+        data=generar_plantilla_pedidos(),
+        file_name="Plantilla_Pedidos.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
     )
 
 if not mb51_file or not po_file:
@@ -458,12 +457,12 @@ with tab1:
     def color_alert_row(row):
         alerta = row.get("Alerta", "")
         colors = {
-            "VERDE":       "background-color: #e8f5e9",
-            "AMARILLO":    "background-color: #fff8e1",
-            "ROJO":        "background-color: #ffebee",
-            "SIN ENTRADA": "background-color: #f5f5f5",
+            "VERDE":       "background-color: #c6efce; color: #000000",
+            "AMARILLO":    "background-color: #ffeb9c; color: #000000",
+            "ROJO":        "background-color: #ffc7ce; color: #000000",
+            "SIN ENTRADA": "background-color: #eeeeee; color: #000000",
         }
-        c = colors.get(alerta, "")
+        c = colors.get(alerta, "color: #000000")
         return [c] * len(row)
 
     styled = df_show.style.apply(color_alert_row, axis=1)
